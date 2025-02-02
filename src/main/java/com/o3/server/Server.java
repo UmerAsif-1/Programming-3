@@ -50,6 +50,7 @@ public class Server implements HttpHandler {
         os.close();
     }
 
+    
 
     private void handleUnsupported(HttpExchange t) throws IOException {
         String response = "Not supported";
