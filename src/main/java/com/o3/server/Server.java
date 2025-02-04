@@ -8,41 +8,174 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 public class Server implements HttpHandler {
+    private Map<String, User> users = new HashMap<>();
     private List<String> messages = new ArrayList<>(); // Store messages
+    private List<ObservationRecord> observationRecords = new ArrayList<>(); // Store observation records
+
     @Override
     public void handle(HttpExchange t) throws IOException {
+        String path = t.getRequestURI().getPath();
+
         if (t.getRequestMethod().equalsIgnoreCase("POST")) {
-            handlePost(t);
+            if (path.equals("/registration")) {
+                handleUserRegistration(t); // Handle user registration
+            } else if (path.equals("/observationrecord")) {
+                handlePostObservationRecord(t); // Handle observation record posting
+            } else {
+                handleUnsupported(t);
+            }
         } else if (t.getRequestMethod().equalsIgnoreCase("GET")) {
-            handleGet(t);
+            if (path.equals("/observationrecord")) {
+                handleGetObservationRecords(t); // Handle retrieving observation records
+            } else {
+                handleUnsupported(t);
+            }
         } else {
             handleUnsupported(t);
         }
     }
-    private void handlePost(HttpExchange t) throws IOException {
-        InputStream inputStream = t.getRequestBody();
-        String message = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
+
+    // Handle user registration (POST /registration)
+    private void handleUserRegistration(HttpExchange exchange) throws IOException {
+        InputStream inputStream = exchange.getRequestBody();
+        String json = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
                 .lines().collect(Collectors.joining("\n"));
-        messages.add(message);
-        
-        t.sendResponseHeaders(200, 0);
-        t.getResponseBody().close();
+
+        try {
+            JSONObject jsonObject = new JSONObject(json);
+            // Validate required fields
+            if (!jsonObject.has("username") || !jsonObject.has("password") || !jsonObject.has("email")) {
+                sendResponse(exchange, 400, "Missing fields: username, password, and email are required");
+                return;
+            }
+
+            String username = jsonObject.getString("username");
+            String password = jsonObject.getString("password");
+            String email = jsonObject.getString("email");
+
+            // Check if the user already exists
+            if (users.containsKey(username)) {
+                sendResponse(exchange, 400, "User already exists");
+                return;
+            }
+
+            // Create new user and store in the users map
+            users.put(username, new User(username, password, email));
+            sendResponse(exchange, 200, "User registered successfully");
+        } catch (JSONException e) {
+            sendResponse(exchange, 400, "Invalid JSON format or missing fields");
+        }
     }
-    private void handleGet(HttpExchange t) throws IOException {
-        String responseString = messages.isEmpty() ? "No messages" : String.join("\n", messages);
-        byte[] responseBytes = responseString.getBytes(StandardCharsets.UTF_8);
-        t.sendResponseHeaders(200, responseBytes.length);
-        OutputStream os = t.getResponseBody();
-        os.write(responseBytes);
+
+    // Handle posting an observation record (POST /observationrecord)
+    private void handlePostObservationRecord(HttpExchange exchange) throws IOException {
+        InputStream inputStream = exchange.getRequestBody();
+        String json = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
+                .lines().collect(Collectors.joining("\n"));
+    
+        try {
+            JSONObject jsonObject = new JSONObject(json);
+    
+            // More specific missing field checks:
+            if (!jsonObject.has("recordIdentifier")) {
+                sendResponse(exchange, 400, "Missing required field: recordIdentifier");
+                return;
+            }
+            if (!jsonObject.has("recordDescription")) {
+                sendResponse(exchange, 400, "Missing required field: recordDescription");
+                return;
+            }
+            if (!jsonObject.has("recordPayload")) {
+                sendResponse(exchange, 400, "Missing required field: recordPayload");
+                return;
+            }
+            if (!jsonObject.has("recordRightAscension")) {
+                sendResponse(exchange, 400, "Missing required field: recordRightAscension");
+                return;
+            }
+            if (!jsonObject.has("recordDeclination")) {
+                sendResponse(exchange, 400, "Missing required field: recordDeclination");
+                return;
+            }
+    
+    
+            String recordIdentifier = jsonObject.getString("recordIdentifier");
+            String recordDescription = jsonObject.getString("recordDescription");
+            String recordPayload = jsonObject.getString("recordPayload");
+            String recordRightAscension = jsonObject.getString("recordRightAscension");
+            String recordDeclination = jsonObject.getString("recordDeclination");
+    
+            ObservationRecord observationRecord = new ObservationRecord(recordIdentifier, recordDescription,
+                    recordPayload, recordRightAscension, recordDeclination);
+    
+            observationRecords.add(observationRecord);
+    
+            sendResponse(exchange, 200, "Observation record posted successfully");
+    
+        } catch (JSONException e) {
+            sendResponse(exchange, 400, "Invalid JSON format: " + e.getMessage()); // Include exception details
+        }
+    }
+
+    // Handle retrieving all observation records (GET /observationrecord)
+    private void handleGetObservationRecords(HttpExchange exchange) throws IOException {
+        try {
+            if (observationRecords.isEmpty()) {
+                exchange.sendResponseHeaders(204, -1); // No Content
+                return; // Important: Exit the handler after sending the 204
+            }
+    
+            JSONArray jsonRecords = new JSONArray();
+            for (ObservationRecord record : observationRecords) {
+                JSONObject jsonRecord = new JSONObject();
+                jsonRecord.put("recordIdentifier", record.getRecordIdentifier());
+                jsonRecord.put("recordDescription", record.getRecordDescription());
+                jsonRecord.put("recordPayload", record.getRecordPayload());
+                jsonRecord.put("recordRightAscension", record.getRecordRightAscension());
+                jsonRecord.put("recordDeclination", record.getRecordDeclination());
+                jsonRecords.put(jsonRecord);
+            }
+    
+            String responseString = jsonRecords.toString();
+            byte[] responseBytes = responseString.getBytes(StandardCharsets.UTF_8);
+    
+            exchange.sendResponseHeaders(200, responseBytes.length);
+            OutputStream os = exchange.getResponseBody();
+            os.write(responseBytes);
+            os.close();
+    
+        } catch (JSONException | IOException e) {
+            String errorMessage = "Error handling GET request: " + e.getMessage(); // More specific message
+            byte[] errorBytes = errorMessage.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(500, errorBytes.length); // Internal Server Error
+            OutputStream os = exchange.getResponseBody();
+            os.write(errorBytes);
+            os.close();
+            e.printStackTrace(); // Log the error on the server-side
+        }
+    }
+    // Utility method to send responses
+    private void sendResponse(HttpExchange exchange, int code, String message) throws IOException {
+        byte[] response = message.getBytes(StandardCharsets.UTF_8);
+        exchange.sendResponseHeaders(code, response.length);
+        OutputStream os = exchange.getResponseBody();
+        os.write(response);
         os.close();
     }
+
     private void handleUnsupported(HttpExchange t) throws IOException {
         String response = "Not supported";
         byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
@@ -51,11 +184,13 @@ public class Server implements HttpHandler {
         os.write(responseBytes);
         os.close();
     }
+
     public static void main(String[] args) throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress(8001), 0);
-        server.createContext("/datarecord", new Server());
+        server.createContext("/registration", new Server()); // Registration endpoint
+        server.createContext("/observationrecord", new Server()); // Observation record posting and retrieval endpoint
         server.setExecutor(null);
         server.start();
-        System.out.println("Server running at http://127.0.0.1:8001/datarecord");
+        System.out.println("Server running at http://127.0.0.1:8001");
     }
 }
