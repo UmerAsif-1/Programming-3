@@ -26,7 +26,9 @@ import org.json.JSONObject;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpsConfigurator;
+import com.sun.net.httpserver.HttpsParameters;
 import com.sun.net.httpserver.HttpsServer;
+
 public class Server implements HttpHandler {
     private Map<String, User> users = new HashMap<>();
     private List<String> messages = new ArrayList<>(); // Store messages
@@ -210,33 +212,55 @@ public class Server implements HttpHandler {
         }
     }
     public static void main(String[] args) throws Exception {
-            if (args.length != 2) {
-                System.err.println("Usage: java Server <keystore_path> <keystore_password>");
-                System.exit(1);
-            }
-    
-            String keystorePath = args[0];
-            String keystorePassword = args[1];
-    
-            try {
-                SSLContext sslContext = myServerSSLContext(keystorePath, keystorePassword);
-    
-                // ***THIS IS THE CRUCIAL LINE YOU WERE MISSING***
-                HttpsServer server = HttpsServer.create(new InetSocketAddress(8001), 0); // Use HttpsServer
-                server.setHttpsConfigurator(new HttpsConfigurator(sslContext)); // Configure with SSL
-    
-                server.createContext("/registration", new Server());
-                server.createContext("/observationrecord", new Server());
-                server.setExecutor(null);
-                server.start();
-                System.out.println("Server running at https://127.0.0.1:8001"); // Note https
-    
-            } catch (Exception e) {
-                System.err.println("Error starting server: " + e.getMessage());
-                e.printStackTrace();
-                System.exit(1);
-            }
+        if (args.length != 2) {
+            System.err.println("Usage: java Server <keystore_path> <keystore_password>");
+            System.exit(1);
         }
+    
+        String keystorePath = args[0];
+        String keystorePassword = args[1];
+    
+        try {
+            SSLContext sslContext = myServerSSLContext(keystorePath, keystorePassword);
+    
+            // Use HttpsServer instead of HttpServer
+            HttpsServer server = HttpsServer.create(new InetSocketAddress(8001), 0);
+    
+            // setting up the HTTPS configurator
+            server.setHttpsConfigurator(new HttpsConfigurator(sslContext) {
+                @Override
+                public void configure(HttpsParameters params) {
+                    params.setSSLParameters(sslContext.getDefaultSSLParameters());
+                }
+            });
+
+            UserAuthenticator authenticator = new UserAuthenticator("observationrecord"); // Realm name
+    
+            // Register endpoints
+
+            Server observationHandler = new Server(); // For /observationrecord (with authentication)
+            RegistrationHandler registrationHandler = new RegistrationHandler(authenticator); // For /registration
+
+            com.sun.net.httpserver.HttpContext observationContext = server.createContext("/observationrecord", observationHandler);
+            observationContext.setAuthenticator(authenticator); // Authentication for /observationrecord
+
+            com.sun.net.httpserver.HttpContext registrationContext = server.createContext("/registration", registrationHandler);
+            
+
+            server.setExecutor(null);
+            server.start();
+    
+            System.out.println("Server running at https://127.0.0.1:8001"); // Use HTTPS
+        } catch (IOException e) { // Catch IOExceptions
+            System.err.println("Error starting server (I/O): " + e.getMessage());
+            e.printStackTrace(); // Print stack trace for debugging
+            System.exit(1); // Exit with error code
+        } catch (Exception e) { // Catch other exceptions (SSL setup, etc.)
+            System.err.println("Error starting server: " + e.getMessage());
+            e.printStackTrace(); // Print stack trace for debugging
+            System.exit(1); // Exit with error code
+        }
+    }
     
 
 }
