@@ -25,7 +25,8 @@ import org.json.JSONObject;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
-import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpsConfigurator;
+import com.sun.net.httpserver.HttpsServer;
 public class Server implements HttpHandler {
     private Map<String, User> users = new HashMap<>();
     private List<String> messages = new ArrayList<>(); // Store messages
@@ -190,50 +191,52 @@ public class Server implements HttpHandler {
         os.write(responseBytes);
         os.close();
     }
+    private static SSLContext myServerSSLContext(String keystorePath, String keystorePassword) { // Correct placement
+        try {
+            KeyStore keyStore = KeyStore.getInstance("JKS"); // Or PKCS12
+            try (FileInputStream keystoreInputStream = new FileInputStream(keystorePath)) {
+                keyStore.load(keystoreInputStream, keystorePassword.toCharArray());
+            }
 
-    public static void main(String[] args) throws Exception {
-    if (args.length < 2) {
-        System.err.println("Usage: java -jar myserver.jar <keystorePath> <keystorePassword>");
-        System.exit(1);
-    }
+            KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            keyManagerFactory.init(keyStore, keystorePassword.toCharArray());
 
-    // Keystore path and password passed as command-line arguments
-    String keystorePath = args[0];
-    String keystorePassword = args[1];
-
-    // Initialize SSLContext using the passed arguments
-    SSLContext sslContext = myServerSSLContext(keystorePath, keystorePassword);
-
-    // Start the HTTP server with SSL enabled
-    HttpServer server = HttpServer.create(new InetSocketAddress(8001), 0);
-    server.createContext("/registration", new Server()); // Registration endpoint
-    server.createContext("/observationrecord", new Server()); // Observation record posting and retrieval endpoint
-    server.setExecutor(null); // Default executor
-    server.start();
-
-    System.out.println("Server running at https://127.0.0.1:8001 with SSL context");
-}
-
-// Implement this method to create and return an SSLContext using the keystore
-private static SSLContext myServerSSLContext(String keystorePath, String keystorePassword) {
-    // Code to initialize the SSLContext with the provided keystore and password
-    // This will need to load the keystore file and set up SSL parameters
-    try {
-        KeyStore keyStore = KeyStore.getInstance("JKS");
-        try (FileInputStream keystoreInputStream = new FileInputStream(keystorePath)) {
-            keyStore.load(keystoreInputStream, keystorePassword.toCharArray());
+            SSLContext sslContext = SSLContext.getInstance("TLS"); // Or TLSv1.2
+            sslContext.init(keyManagerFactory.getKeyManagers(), null, new SecureRandom());
+            return sslContext;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Error initializing SSLContext", e);
         }
-
-        KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-        keyManagerFactory.init(keyStore, keystorePassword.toCharArray());
-
-        SSLContext sslContext = SSLContext.getInstance("TLS");
-        sslContext.init(keyManagerFactory.getKeyManagers(), null, new SecureRandom());
-        return sslContext;
-    } catch (Exception e) {
-        e.printStackTrace();
-        throw new RuntimeException("Error initializing SSLContext", e);
     }
-}
+    public static void main(String[] args) throws Exception {
+            if (args.length != 2) {
+                System.err.println("Usage: java Server <keystore_path> <keystore_password>");
+                System.exit(1);
+            }
+    
+            String keystorePath = args[0];
+            String keystorePassword = args[1];
+    
+            try {
+                SSLContext sslContext = myServerSSLContext(keystorePath, keystorePassword);
+    
+                // ***THIS IS THE CRUCIAL LINE YOU WERE MISSING***
+                HttpsServer server = HttpsServer.create(new InetSocketAddress(8001), 0); // Use HttpsServer
+                server.setHttpsConfigurator(new HttpsConfigurator(sslContext)); // Configure with SSL
+    
+                server.createContext("/registration", new Server());
+                server.createContext("/observationrecord", new Server());
+                server.setExecutor(null);
+                server.start();
+                System.out.println("Server running at https://127.0.0.1:8001"); // Note https
+    
+            } catch (Exception e) {
+                System.err.println("Error starting server: " + e.getMessage());
+                e.printStackTrace();
+                System.exit(1);
+            }
+        }
+    
 
 }
