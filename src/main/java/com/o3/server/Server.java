@@ -86,7 +86,7 @@ public class Server implements HttpHandler {
     public static void main(String[] args) throws Exception {
         if (args.length != 2) {
             System.err.println("Usage: java Server <keystore_path> <keystore_password>");
-            System.exit(1); // Important: Exit with error code if arguments are missing
+            System.exit(1); // Exit with error code if arguments are missing
         }
 
         String keystorePath = args[0];
