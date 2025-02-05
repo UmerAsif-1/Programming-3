@@ -68,25 +68,32 @@ public class Server implements HttpHandler {
         os.close();
     }
 
-    private static SSLContext myServerSSLContext() throws Exception{
-    char[] passphrase = "Rajah4321*".toCharArray();
-    KeyStore ks = KeyStore.getInstance("JKS");
-    ks.load(new FileInputStream("C:\\Users\\rajah\\group-0083-project\\keystore.jks"), passphrase);
+    private static SSLContext myServerSSLContext(String keystorePath, String keystorePassword) throws Exception {
+        KeyStore ks = KeyStore.getInstance("JKS");
+        ks.load(new FileInputStream(keystorePath), keystorePassword.toCharArray()); // Use arguments!
 
-   KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
-   kmf.init(ks, passphrase);
+        KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
+        kmf.init(ks, keystorePassword.toCharArray());
 
-   TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509");
-   tmf.init(ks);
+        TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509");
+        tmf.init(ks);
 
-   SSLContext ssl = SSLContext.getInstance("TLS");
-   ssl.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
-   return ssl;
+        SSLContext ssl = SSLContext.getInstance("TLS");
+        ssl.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
+        return ssl;
     }
 
     public static void main(String[] args) throws Exception {
+        if (args.length != 2) {
+            System.err.println("Usage: java Server <keystore_path> <keystore_password>");
+            System.exit(1); // Important: Exit with error code if arguments are missing
+        }
+
+        String keystorePath = args[0];
+        String keystorePassword = args[1];
+
         try {
-        SSLContext sslContext = myServerSSLContext(); 
+            SSLContext sslContext = myServerSSLContext(keystorePath, keystorePassword);
 
         HttpsServer server = HttpsServer.create(new InetSocketAddress(8001), 0);
         server.setHttpsConfigurator(new HttpsConfigurator(sslContext) {
