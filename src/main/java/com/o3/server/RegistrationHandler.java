@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.stream.Collectors;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -18,67 +19,70 @@ public class RegistrationHandler implements HttpHandler {
     }
 
     @Override
-    public void handle(HttpExchange exchange) throws IOException {
-        if (exchange.getRequestMethod().equalsIgnoreCase("POST")) {
-            handlePost(exchange);
-        } else if (exchange.getRequestMethod().equalsIgnoreCase("GET")) {
-            handleGet(exchange);
+    public void handle(HttpExchange t) throws IOException {
+        if (t.getRequestMethod().equalsIgnoreCase("POST")) {
+            handlePost(t);
+        } else if (t.getRequestMethod().equalsIgnoreCase("GET")) {
+            handleGet(t);
         } else {
-            handleUnsupported(exchange);
+            handleUnsupported(t);
         }
     }
 
-    private void handlePost(HttpExchange exchange) throws IOException {
-        String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
+    private void handlePost(HttpExchange t) throws IOException {
+        String contentType = t.getRequestHeaders().getFirst("Content-Type");
         if (contentType == null || !contentType.equals("text/plain")) {
-            sendResponse(exchange, 400, "Invalid Content-Type. Expected 'text/plain'");
+            String response = "Content-Type must be text/plain";
+            t.sendResponseHeaders(400, response.length());
+            OutputStream os = t.getResponseBody();
+            os.write(response.getBytes());
+            os.close();
             return;
         }
 
-        InputStreamReader reader = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8);
-        BufferedReader br = new BufferedReader(reader);
-        String requestBody = br.readLine();
+        InputStreamReader reader = new InputStreamReader(t.getRequestBody(), StandardCharsets.UTF_8);
+        String requestBody = new BufferedReader(reader).lines().collect(Collectors.joining("\n"));
 
-        if (requestBody == null) {
-            sendResponse(exchange, 400, "Empty request body");
+        String[] parts = requestBody.split(":");
+        if (parts.length != 2) {
+            String response = "Invalid registration data. Format must be username:password";
+            t.sendResponseHeaders(400, response.length());
+            OutputStream os = t.getResponseBody();
+            os.write(response.getBytes());
+            os.close();
             return;
         }
 
-        String[] userInfo = requestBody.split(":");
-        if (userInfo.length != 2) {
-            sendResponse(exchange, 400, "Invalid user information format. Expected 'username:password'");
-            return;
-        }
-
-        String username = userInfo[0];
-        String password = userInfo[1];
+        String username = parts[0];
+        String password = parts[1];
 
         if (authenticator.addUser(username, password)) {
-            sendResponse(exchange, 201, "User registered successfully"); // 201 Created is more appropriate
+            String response = "User registered successfully"; // Or just "" if you want to strictly follow the instructions about not having a response body
+            t.sendResponseHeaders(201, response.length());
+            OutputStream os = t.getResponseBody();
+            os.write(response.getBytes());
+            os.close();
         } else {
-            sendResponse(exchange, 403, "User already registered"); // 403 Forbidden
+            String response = "User already registered";
+            t.sendResponseHeaders(403, response.length());
+            OutputStream os = t.getResponseBody();
+            os.write(response.getBytes());
+            os.close();
         }
     }
 
-    private void handleGet(HttpExchange exchange) throws IOException {
-        sendResponse(exchange, 400, "Not supported");
-    }
-
-    private void handleUnsupported(HttpExchange exchange) throws IOException {
+    private void handleGet(HttpExchange t) throws IOException {
         String response = "Not supported";
-        byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
-        exchange.sendResponseHeaders(400, responseBytes.length);
-        OutputStream os = exchange.getResponseBody();
-        os.write(responseBytes);
+        t.sendResponseHeaders(400, response.length());
+        OutputStream os = t.getResponseBody();
+        os.write(response.getBytes());
         os.close();
     }
-
-
-    private void sendResponse(HttpExchange exchange, int code, String message) throws IOException {
-        byte[] response = message.getBytes(StandardCharsets.UTF_8);
-        exchange.sendResponseHeaders(code, response.length);
-        OutputStream os = exchange.getResponseBody();
-        os.write(response);
+    private void handleUnsupported(HttpExchange t) throws IOException {
+        String response = "Not supported";
+        t.sendResponseHeaders(400, response.length());
+        OutputStream os = t.getResponseBody();
+        os.write(response.getBytes());
         os.close();
     }
 }
