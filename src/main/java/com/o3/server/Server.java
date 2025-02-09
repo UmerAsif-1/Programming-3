@@ -1,9 +1,9 @@
 package com.o3.server;
 
+
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -18,6 +18,10 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManagerFactory;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -28,9 +32,10 @@ import com.sun.net.httpserver.HttpsServer;
 
 
 public class Server implements HttpHandler {
-    private List<String> messages = new ArrayList<>(); // Store messages
+    private List<ObservationRecord> messages = new ArrayList<>(); // Store messages
     @Override
     public void handle(HttpExchange t) throws IOException {
+       try{
         if (t.getRequestMethod().equalsIgnoreCase("POST")) {
             handlePost(t);
         } else if (t.getRequestMethod().equalsIgnoreCase("GET")) {
@@ -38,31 +43,87 @@ public class Server implements HttpHandler {
         } else {
             handleUnsupported(t);
         }
-    }
+    }catch (Exception e) {  // Catch block for ALL exceptions
+        System.err.println("Error in handle(): " + e.getMessage()); // Log the error!
+        e.printStackTrace(); // Print the stack trace for debugging
+        String errorMessage = "An error occurred: " + e.getMessage(); // Error message for the client
+        sendResponse(t, 500, errorMessage); // Send 500 Internal Server Error
+    } 
+}
     private void handlePost(HttpExchange t) throws IOException {
-        InputStream inputStream = t.getRequestBody();
-        String message = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
-                .lines().collect(Collectors.joining("\n"));
-        messages.add(message);
-    
-        System.out.println("Received message: " + message); // Confirmation!
-    
-        t.sendResponseHeaders(200, 0); // Or send a more informative response
-        t.getResponseBody().close();
+        String contentType = t.getRequestHeaders().getFirst("Content-Type");
+        if (contentType == null || !contentType.equals("application/json")) {
+            sendResponse(t, 400, "Content-Type must be application/json");
+            return;
+        }
+
+        try (InputStreamReader reader = new InputStreamReader(t.getRequestBody(), StandardCharsets.UTF_8);
+             BufferedReader br = new BufferedReader(reader)) {
+
+            String requestBody = br.lines().collect(Collectors.joining("\n"));
+
+            try {
+                JSONObject json = new JSONObject(requestBody);
+
+                String recordIdentifier = json.getString("recordIdentifier");
+                String recordDescription = json.getString("recordDescription");
+                String recordPayload = json.getString("recordPayload");
+                String recordRightAscension = json.getString("recordRightAscension");
+                String recordDeclination = json.getString("recordDeclination");
+
+                ObservationRecord record = new ObservationRecord(recordIdentifier, recordDescription, recordPayload, recordRightAscension, recordDeclination);
+                messages.add(record);
+
+                System.out.println("Received message: " + json.toString()); // Log the JSON
+
+                sendResponse(t, 200, ""); // 200 OK, empty body
+
+            } catch (JSONException | IllegalArgumentException e) {
+                sendResponse(t, 400, "Invalid JSON message data: " + e.getMessage());
+            }
+
+        }
     }
 
     private void handleGet(HttpExchange t) throws IOException {
-        String responseString = messages.isEmpty() ? "No messages" : String.join("\n", messages);
+        if (messages.isEmpty()) {
+            t.sendResponseHeaders(204, -1); // 204 No Content, -1 for no content length
+            t.getResponseBody().close(); // Important: Close the response body
+            return; // Exit early since there's no content
+        }
+    
+        JSONArray jsonArray = new JSONArray();
+        for (ObservationRecord record : messages) {
+            JSONObject json = new JSONObject();
+            json.put("recordIdentifier", record.getRecordIdentifier());
+            json.put("recordDescription", record.getRecordDescription());
+            json.put("recordPayload", record.getRecordPayload());
+            json.put("recordRightAscension", record.getRecordRightAscension());
+            json.put("recordDeclination", record.getRecordDeclination());
+            jsonArray.put(json);
+        }
+    
+        String responseString = jsonArray.toString();
         byte[] responseBytes = responseString.getBytes(StandardCharsets.UTF_8);
-        t.sendResponseHeaders(200, responseBytes.length);
+    
+        t.sendResponseHeaders(200, responseBytes.length); // 200 OK, with content length
         OutputStream os = t.getResponseBody();
         os.write(responseBytes);
         os.close();
     }
+
     private void handleUnsupported(HttpExchange t) throws IOException {
         String response = "Not supported";
         byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
         t.sendResponseHeaders(400, responseBytes.length);
+        OutputStream os = t.getResponseBody();
+        os.write(responseBytes);
+        os.close();
+    }
+
+    private void sendResponse(HttpExchange t, int statusCode, String response) throws IOException {
+        byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
+        t.sendResponseHeaders(statusCode, responseBytes.length);
         OutputStream os = t.getResponseBody();
         os.write(responseBytes);
         os.close();
