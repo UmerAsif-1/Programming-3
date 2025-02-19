@@ -107,7 +107,7 @@ public class Server implements HttpHandler {
     
                 DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX");
                 String recordTimeReceived = record.getSent().withZoneSameInstant(ZoneOffset.UTC).format(formatter);
-                json.put("recordTimeRecieved", recordTimeReceived);
+                json.put("recordTimeReceived", recordTimeReceived);
     
                 jsonArray.put(json);
             }
