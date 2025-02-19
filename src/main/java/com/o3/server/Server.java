@@ -93,14 +93,25 @@ public class Server implements HttpHandler {
         }
     
         JSONArray jsonArray = new JSONArray();
-        for (ObservationRecord record : messages) {
-            JSONObject json = new JSONObject();
-            json.put("recordIdentifier", record.getRecordIdentifier());
-            json.put("recordDescription", record.getRecordDescription());
-            json.put("recordPayload", record.getRecordPayload());
-            json.put("recordRightAscension", record.getRecordRightAscension());
-            json.put("recordDeclination", record.getRecordDeclination());
+        try {
+            List<ObservationRecord> records = db.getMessages(); 
+            for (ObservationRecord record : records) {
+                JSONObject json = new JSONObject();
+                json.put("recordIdentifier", record.getRecordIdentifier());
+                json.put("recordDescription", record.getRecordDescription());
+                json.put("recordPayload", record.getRecordPayload());
+                json.put("recordRightAscension", record.getRecordRightAscension());
+                json.put("recordDeclination", record.getRecordDeclination());
+                // Format timestamp to ISO 8601
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX");
+            String recordTimeReceived = record.getSent().withZoneSameInstant(ZoneOffset.UTC).format(formatter);
+            json.put("recordTimeRecieved", recordTimeReceived);
+
             jsonArray.put(json);
+        }catch (SQLException e) {
+            System.err.println("Database error retrieving messages: " + e.getMessage());
+            e.printStackTrace(); 
+           
         }
     
         String responseString = jsonArray.toString();
@@ -152,6 +163,7 @@ public class Server implements HttpHandler {
 
         String keystorePath = args[0];
         String keystorePassword = args[1];
+        
 
         try {
             SSLContext sslContext = myServerSSLContext(keystorePath, keystorePassword);
@@ -164,10 +176,12 @@ public class Server implements HttpHandler {
                 params.setSSLParameters(sslparams);
             }
         });
+        MessageDatabase db = new MessageDatabase();
+        db.open("MessageDB.db");
         UserAuthenticator authenticator = new UserAuthenticator("datarecord");
         HttpContext context = server.createContext("/datarecord", new Server()); // 2. Get context
         context.setAuthenticator(authenticator); // 3. Set authenticator
-        RegistrationHandler registrationHandler = new RegistrationHandler(authenticator); // For /registration
+        RegistrationHandler registrationHandler = new RegistrationHandler(authenticator, db); // For /registration
         server.createContext("/registration", registrationHandler); // No authenticator for /registration
 
         server.setExecutor(null);

@@ -16,9 +16,14 @@ import com.sun.net.httpserver.HttpHandler;
 public class RegistrationHandler implements HttpHandler {
 // private static final Map<String, User> registeredUsers = new HashMap<>();
     private UserAuthenticator authenticator;
+    private MessageDatabase db; 
 
     public RegistrationHandler(UserAuthenticator authenticator) {
         this.authenticator = authenticator;
+    }
+    public RegistrationHandler(UserAuthenticator authenticator, MessageDatabase db) { // Add db to constructor
+        this.authenticator = authenticator;
+        this.db = db;
     }
 
     @Override
@@ -83,7 +88,7 @@ public class RegistrationHandler implements HttpHandler {
             String password = json.getString("password");
             String email = json.getString("email");
 
-            if (authenticator.addUser(username, password, email)) {
+            if (db.addUser(username, password, email)) {
                 String response = "User registered successfully";
                 t.sendResponseHeaders(201, response.length());
                 OutputStream os = t.getResponseBody();
@@ -96,6 +101,15 @@ public class RegistrationHandler implements HttpHandler {
                 os.write(response.getBytes());
                 os.close();
             }
+        }  catch (SQLException e) {
+                String response = "Database error: " + e.getMessage();
+                t.sendResponseHeaders(500, response.length()); // Internal Server Error
+                OutputStream os = t.getResponseBody();
+                os.write(response.getBytes());
+                os.close();
+                e.printStackTrace(); // Log the error
+            }
+
         } catch (JSONException e) {
             String response = "Invalid JSON format: " + e.getMessage();
             t.sendResponseHeaders(400, response.length());
@@ -103,7 +117,6 @@ public class RegistrationHandler implements HttpHandler {
             os.write(response.getBytes());
             os.close();
         }
-    
     }
 
     private void handleGet(HttpExchange t) throws IOException {
