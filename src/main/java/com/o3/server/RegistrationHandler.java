@@ -118,6 +118,7 @@ public class RegistrationHandler implements HttpHandler {
             os.close();
         }
     }
+    }
 
     private void handleGet(HttpExchange t) throws IOException {
         String response = "Not supported";
