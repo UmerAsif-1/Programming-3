@@ -35,7 +35,11 @@ import java.sql.SQLException;
 
 
 public class Server implements HttpHandler {
-    private List<ObservationRecord> messages = new ArrayList<>(); // Store messages
+    private MessageDatabase db; 
+
+    public Server(MessageDatabase db) { 
+        this.db = db;
+    }
     @Override
     public void handle(HttpExchange t) throws IOException {
        try{
@@ -75,13 +79,13 @@ public class Server implements HttpHandler {
                 String recordDeclination = json.getString("recordDeclination");
 
                 ObservationRecord record = new ObservationRecord(recordIdentifier, recordDescription, recordPayload, recordRightAscension, recordDeclination);
-                messages.add(record);
+                db.insertMessage(record); // Store in database!
 
                 System.out.println("Received message: " + json.toString()); // Log the JSON
 
                 sendResponse(t, 200, ""); // 200 OK, empty body
 
-            } catch (JSONException | IllegalArgumentException e) {
+            } catch (JSONException | IllegalArgumentException | SQLException e) { 
                 sendResponse(t, 400, "Invalid JSON message data: " + e.getMessage());
             }
 
@@ -89,15 +93,10 @@ public class Server implements HttpHandler {
     }
 
     private void handleGet(HttpExchange t) throws IOException {
-        if (messages.isEmpty()) {
-            t.sendResponseHeaders(204, -1); // 204 No Content, -1 for no content length
-            t.getResponseBody().close(); // Important: Close the response body
-            return; // Exit early since there's no content
-        }
-    
+       
         JSONArray jsonArray = new JSONArray();
         try {
-            List<ObservationRecord> records = db.getMessages(); 
+            List<ObservationRecord> records = this.db.getMessages();
             for (ObservationRecord record : records) {
                 JSONObject json = new JSONObject();
                 json.put("recordIdentifier", record.getRecordIdentifier());
@@ -105,22 +104,25 @@ public class Server implements HttpHandler {
                 json.put("recordPayload", record.getRecordPayload());
                 json.put("recordRightAscension", record.getRecordRightAscension());
                 json.put("recordDeclination", record.getRecordDeclination());
-                // Format timestamp to ISO 8601
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX");
-            String recordTimeReceived = record.getSent().withZoneSameInstant(ZoneOffset.UTC).format(formatter);
-            json.put("recordTimeRecieved", recordTimeReceived);
-
-            jsonArray.put(json);
-        }catch (SQLException e) {
+    
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX");
+                String recordTimeReceived = record.getSent().withZoneSameInstant(ZoneOffset.UTC).format(formatter);
+                json.put("recordTimeRecieved", recordTimeReceived);
+    
+                jsonArray.put(json);
+            }
+        } catch (SQLException e) {
             System.err.println("Database error retrieving messages: " + e.getMessage());
-            e.printStackTrace(); 
-           
+            e.printStackTrace();
+        } catch (JSONException e) {
+            System.err.println("Error constructing JSON: " + e.getMessage());
+            e.printStackTrace();
         }
     
         String responseString = jsonArray.toString();
         byte[] responseBytes = responseString.getBytes(StandardCharsets.UTF_8);
     
-        t.sendResponseHeaders(200, responseBytes.length); // 200 OK, with content length
+        t.sendResponseHeaders(200, responseBytes.length);
         OutputStream os = t.getResponseBody();
         os.write(responseBytes);
         os.close();
@@ -181,8 +183,8 @@ public class Server implements HttpHandler {
         });
         MessageDatabase db = new MessageDatabase();
         db.open("MessageDB.db");
-        UserAuthenticator authenticator = new UserAuthenticator("datarecord");
-        HttpContext context = server.createContext("/datarecord", new Server()); // 2. Get context
+        UserAuthenticator authenticator = new UserAuthenticator("datarecord" , db); // 1. Create authenticator
+        HttpContext context = server.createContext("/datarecord", new Server(db)); // 2. Get context
         context.setAuthenticator(authenticator); // 3. Set authenticator
         RegistrationHandler registrationHandler = new RegistrationHandler(authenticator, db); // For /registration
         server.createContext("/registration", registrationHandler); // No authenticator for /registration
