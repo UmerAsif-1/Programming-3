@@ -1,5 +1,10 @@
 package com.o3.server;
 
+
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+
 public class ObservationRecord {
     private String recordIdentifier;
     private String recordDescription;
@@ -34,11 +39,11 @@ public class ObservationRecord {
     public void setSent(ZonedDateTime sent) { this.sent = sent; } // Setter for sent
 
     // Helper functions for timestamp conversion
-    long dateAsInt() {
-        return sent.toInstant().toEpochMilli();
+    public long dateAsInt() {
+        return sent.toInstant().toEpochMilli(); // Convert to Unix time (milliseconds since epoch)
     }
 
-    void setSent(long epoch) {
-        sent = ZonedDateTime.ofInstant(Instant.ofEpochMilli(epoch), ZoneOffset.UTC);
+    public void setSent(long epoch) {
+        sent = ZonedDateTime.ofInstant(Instant.ofEpochMilli(epoch), ZoneOffset.UTC); // Convert Unix time to ZonedDateTime
     }
 }

@@ -4,6 +4,9 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.PreparedStatement; // Import PreparedStatement
+import java.util.ArrayList;
+import java.util.List;
 
 public class MessageDatabase {
     private Connection connection;
@@ -46,18 +49,19 @@ public class MessageDatabase {
 
     // 4. Add user registration
     public boolean addUser(String username, String password, String email) throws SQLException {
-        if (isUserRegistered(username)) {
-            return false; // User already exists
-        }
+    if (isUserRegistered(username)) {
+        return false; // User already exists
+    }
 
-        String insertUserSQL = "INSERT INTO users (username, password, email) " +
-                "VALUES('" + username + "','" + password + "','" + email + "')";
-
-        Statement insertStatement = connection.createStatement();
-        insertStatement.executeUpdate(insertUserSQL);
-        insertStatement.close();
+    String insertUserSQL = "INSERT INTO users (username, password, email) VALUES (?, ?, ?)";
+    try (PreparedStatement preparedStatement = connection.prepareStatement(insertUserSQL)) {
+        preparedStatement.setString(1, username);
+        preparedStatement.setString(2, password);
+        preparedStatement.setString(3, email);
+        preparedStatement.executeUpdate();
         return true;
     }
+}
 
     // Helper method to check if a user is registered
     private boolean isUserRegistered(String username) throws SQLException {

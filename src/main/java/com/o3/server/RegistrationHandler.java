@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.stream.Collectors;
 
 import org.json.JSONException;
@@ -101,24 +102,22 @@ public class RegistrationHandler implements HttpHandler {
                 os.write(response.getBytes());
                 os.close();
             }
-        }  catch (SQLException e) {
-                String response = "Database error: " + e.getMessage();
-                t.sendResponseHeaders(500, response.length()); // Internal Server Error
-                OutputStream os = t.getResponseBody();
-                os.write(response.getBytes());
-                os.close();
-                e.printStackTrace(); // Log the error
-            }
-
-        } catch (JSONException e) {
+         } catch (SQLException e) {
+            String response = "Database error: " + e.getMessage();
+            t.sendResponseHeaders(500, response.length());
+            OutputStream os = t.getResponseBody();
+            os.write(response.getBytes());
+            os.close();
+            e.printStackTrace();
+        } catch (JSONException e) { // <-- Corrected: Removed extra '}'
             String response = "Invalid JSON format: " + e.getMessage();
             t.sendResponseHeaders(400, response.length());
             OutputStream os = t.getResponseBody();
             os.write(response.getBytes());
             os.close();
-        }
     }
-    }
+}
+
 
     private void handleGet(HttpExchange t) throws IOException {
         String response = "Not supported";
