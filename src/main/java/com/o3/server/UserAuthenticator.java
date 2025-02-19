@@ -1,8 +1,6 @@
 package com.o3.server;
 
 import java.sql.SQLException;
-import java.util.Hashtable;
-import java.util.Map;
 
 import com.sun.net.httpserver.BasicAuthenticator;
 
