@@ -90,17 +90,17 @@ public class MessageDatabase {
 
     // 6. Inserting new messages
     public void insertMessage(ObservationRecord record) throws SQLException {
-        long originalPostingTime = record.dateAsInt(); // Assuming you have this method in ObservationRecord
-
-        String insertMessageSQL = "INSERT INTO messages (recordIdentifier, originalPostingTime, recordDescription, recordPayload, recordRightAscension, recordDeclination) " +
-                "VALUES('" + record.getRecordIdentifier() + "'," + originalPostingTime + ",'" +
-                record.getRecordDescription() + "','" + record.getRecordPayload() + "','" +
-                record.getRecordRightAscension() + "','" + record.getRecordDeclination() + "')";
-
-        Statement insertStatement = connection.createStatement();
-        insertStatement.executeUpdate(insertMessageSQL);
-        insertStatement.close();
+    String insertMessageSQL = "INSERT INTO messages (recordIdentifier, originalPostingTime, recordDescription, recordPayload, recordRightAscension, recordDeclination) VALUES (?, ?, ?, ?, ?, ?)";
+    try (PreparedStatement preparedStatement = connection.prepareStatement(insertMessageSQL)) {
+        preparedStatement.setString(1, record.getRecordIdentifier());
+        preparedStatement.setLong(2, record.dateAsInt());
+        preparedStatement.setString(3, record.getRecordDescription());
+        preparedStatement.setString(4, record.getRecordPayload());
+        preparedStatement.setString(5, record.getRecordRightAscension());
+        preparedStatement.setString(6, record.getRecordDeclination());
+        preparedStatement.executeUpdate();
     }
+}
 
     // 7. Reading messages (example - you'll need to adapt this)
     public List<ObservationRecord> getMessages() throws SQLException {
